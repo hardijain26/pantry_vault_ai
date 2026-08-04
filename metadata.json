@@ -1,0 +1,6 @@
+{
+  "name": "Pantry Vault AI - Smart Vegetarian Pantry & Recipe Studio",
+  "description": "A smart vegetarian pantry manager, AI nutrition evaluator, low-stock WhatsApp alert engine, DIY recipe generator, seasonal harvest tracker, and voice recipe transcriber.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
