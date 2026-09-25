@@ -1,4 +1,5 @@
 import { apiPost } from "../lib/api";
+import { prepareImage } from "../lib/image";
 import React, { useState } from "react";
 import { PantryItem, NutrientCategory, FoodGroup } from "../types";
 import {
@@ -19,6 +20,9 @@ import {
   AlertTriangle,
   Filter,
   RotateCcw,
+  Camera,
+  ImagePlus,
+  Loader2,
 } from "lucide-react";
 import { StockReminderModal } from "./StockReminderModal";
 import { ProduceIcon, AestheticProduceArt, PantryItemParallaxWrapper } from "./ProduceIcons";
@@ -173,6 +177,9 @@ export const PantryView: React.FC<PantryViewProps> = ({
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [bulkImage, setBulkImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
+  const [isPreparingImage, setIsPreparingImage] = useState(false);
+  const [pendingItems, setPendingItems] = useState<(Omit<PantryItem, "id"> & { keep: boolean })[] | null>(null);
 
   // Single Item Add Form State
   const [newItem, setNewItem] = useState({
@@ -275,39 +282,81 @@ export const PantryView: React.FC<PantryViewProps> = ({
       return 0;
     });
 
+  const closeBulkModal = () => {
+    if (bulkImage) URL.revokeObjectURL(bulkImage.previewUrl);
+    setBulkImage(null);
+    setBulkText("");
+    setPendingItems(null);
+    setShowBulkModal(false);
+  };
+
+  const handleImagePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again
+    if (!file) return;
+    setIsPreparingImage(true);
+    try {
+      const prepared = await prepareImage(file);
+      if (bulkImage) URL.revokeObjectURL(bulkImage.previewUrl);
+      setBulkImage({ ...prepared, previewUrl: URL.createObjectURL(file) });
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setIsPreparingImage(false);
+    }
+  };
+
   const handleBulkSubmit = async () => {
-    if (!bulkText.trim()) return;
+    if (!bulkText.trim() && !bulkImage) return;
     setIsBulkProcessing(true);
     try {
-      const data = await apiPost<{ items: any[] }>("/api/pantry/categorize", { itemsText: bulkText });
-      if (data.items && Array.isArray(data.items)) {
-        const formatted: Omit<PantryItem, "id">[] = data.items.map((i: any) => ({
-          name: i.name || "Pantry Item",
-          nutrientCategory: (i.nutrientCategory as NutrientCategory) || "Other",
-          foodGroup: (i.foodGroup as FoodGroup) || "Other",
-          quantity: i.defaultQuantity || 500,
-          unit: i.unit || "g",
-          threshold: i.threshold || 150,
-          caloriesPerUnit: i.caloriesPerUnit || 100,
-          proteinPerUnit: i.proteinPerUnit || 5,
-          carbsPerUnit: i.carbsPerUnit || 15,
-          fatsPerUnit: i.fatsPerUnit || 2,
-          fiberPerUnit: i.fiberPerUnit || 3,
-          keyMicroNutrients: i.keyMicroNutrients || ["Essential Nutrients"],
-          healthNotes: i.healthNotes || "Organic pantry item.",
-          expiryDate: i.expiryDate || new Date(Date.now() + 60 * 86400000).toISOString().split("T")[0],
-          lastUpdated: new Date().toISOString(),
-        }));
-        onAddBulkItems(formatted);
-        setBulkText("");
-        setShowBulkModal(false);
+      const data = await apiPost<{ items: any[] }>("/api/pantry/categorize", {
+        itemsText: bulkText.trim() || undefined,
+        imageBase64: bulkImage?.base64,
+        mimeType: bulkImage?.mimeType,
+      });
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length === 0) {
+        alert(bulkImage ? "No grocery items found in that image. Try a clearer photo or a screenshot of the order." : "No items found in that text.");
+        return;
       }
+      const today = Date.now();
+      setPendingItems(
+        items.map((i: any) => {
+          const days = Number(i.estimatedShelfLifeDays) > 0 ? Number(i.estimatedShelfLifeDays) : 30;
+          return {
+            keep: true,
+            name: i.name || "Pantry Item",
+            nutrientCategory: (i.nutrientCategory as NutrientCategory) || "Other",
+            foodGroup: (i.foodGroup as FoodGroup) || "Other",
+            quantity: Number(i.defaultQuantity) > 0 ? Number(i.defaultQuantity) : 1,
+            unit: i.unit || "items",
+            threshold: Number(i.threshold) >= 0 ? Number(i.threshold) : 0,
+            caloriesPerUnit: i.caloriesPerUnit || 0,
+            proteinPerUnit: i.proteinPerUnit || 0,
+            carbsPerUnit: i.carbsPerUnit || 0,
+            fatsPerUnit: i.fatsPerUnit || 0,
+            fiberPerUnit: i.fiberPerUnit || 0,
+            keyMicroNutrients: i.keyMicroNutrients || [],
+            healthNotes: i.healthNotes || "",
+            expiryDate: new Date(today + days * 86400000).toISOString().split("T")[0],
+            lastUpdated: new Date().toISOString(),
+          };
+        })
+      );
     } catch (err) {
       console.error("Bulk import failed:", err);
-      alert((err as Error).message || "Couldn't read that list. Please try again.");
+      alert((err as Error).message || "Couldn't read that. Please try again.");
     } finally {
       setIsBulkProcessing(false);
     }
+  };
+
+  const handleConfirmPending = () => {
+    if (!pendingItems) return;
+    const chosen = pendingItems.filter((p) => p.keep).map(({ keep, ...item }) => item);
+    if (chosen.length > 0) onAddBulkItems(chosen);
+    closeBulkModal();
   };
 
   const handleSingleAddSubmit = (e: React.FormEvent) => {
@@ -393,7 +442,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
               className="flex items-center gap-2 px-4.5 py-2.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold border border-emerald-200 transition shadow-2xs"
             >
               <Sparkles className="w-4 h-4 text-amber-600" />
-              <span>AI List Import</span>
+              <span>Scan bill or paste list</span>
             </button>
 
             <button
@@ -965,62 +1014,149 @@ export const PantryView: React.FC<PantryViewProps> = ({
         </div>
       )}
 
-      {/* AI BULK PASTE IMPORT MODAL */}
+      {/* AI IMPORT MODAL: paste a list, snap a bill, or upload an order screenshot */}
       {showBulkModal && (
         <div className="fixed inset-0 z-50 bg-[#2D2D2D]/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#F9F8F4] border border-[#5A5A40]/15 rounded-3xl p-6 max-w-lg w-full shadow-xl space-y-4">
+          <div className="bg-[#F9F8F4] border border-[#5A5A40]/15 rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-[#B45309]" />
                 <h3 className="text-xl font-serif-italic text-[#5A5A40]">
-                  AI Pantry List Importer
+                  {pendingItems ? "Check your items" : "Add groceries"}
                 </h3>
               </div>
-              <button
-                onClick={() => setShowBulkModal(false)}
-                className="text-[#5A5A40]/60 hover:text-[#5A5A40] p-1 rounded-full"
-              >
+              <button onClick={closeBulkModal} className="text-[#5A5A40]/60 hover:text-[#5A5A40] p-1 rounded-full">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-[#5A5A40]/80 leading-relaxed">
-              Paste ingredients, grocery shopping lists, or pantry inventory notes. Gemini AI will automatically extract names, exact nutrient categories (Gut Health, Probiotics, Protein, etc.), units, and macro estimations.
-            </p>
+            {pendingItems ? (
+              <>
+                <p className="text-xs text-[#5A5A40]/80 leading-relaxed">
+                  Untick anything that's wrong or that you don't want to track. You can edit quantities and expiry dates after adding.
+                </p>
+                <ul className="divide-y divide-[#5A5A40]/10 bg-white rounded-2xl border border-[#5A5A40]/15">
+                  {pendingItems.map((p, idx) => (
+                    <li key={idx}>
+                      <label className="flex items-center gap-3 px-4 py-2.5 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={p.keep}
+                          onChange={() =>
+                            setPendingItems((prev) =>
+                              prev ? prev.map((x, i) => (i === idx ? { ...x, keep: !x.keep } : x)) : prev
+                            )
+                          }
+                          className="w-4 h-4 accent-[#5A5A40]"
+                        />
+                        <span className={`flex-1 font-semibold ${p.keep ? "text-[#2D2D2D]" : "text-stone-400 line-through"}`}>
+                          {p.name}
+                        </span>
+                        <span className="text-[#5A5A40]/70 whitespace-nowrap">
+                          {p.quantity} {p.unit}
+                        </span>
+                        <span className="text-[#5A5A40]/50 whitespace-nowrap hidden sm:inline">use by {p.expiryDate}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setPendingItems(null)}
+                    className="px-4 py-2 text-xs font-semibold text-[#5A5A40]/70 hover:text-[#5A5A40]"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleConfirmPending}
+                    disabled={!pendingItems.some((p) => p.keep)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#5A5A40]/90 text-white rounded-full text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add {pendingItems.filter((p) => p.keep).length} items</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-[#5A5A40]/80 leading-relaxed">
+                  Take a photo of a shop bill, upload a screenshot of your Zepto, Blinkit, Instamart or BigBasket order, or
+                  paste a list. We'll pick out the food items, quantities and a use-by date for each.
+                </p>
 
-            <textarea
-              rows={5}
-              placeholder="E.g., 500g sauerkraut, 1kg organic sprouted quinoa, 200g chia seeds, 1 bottle apple cider vinegar with mother, 400g tempeh, turmeric powder..."
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              className="w-full bg-white border border-[#5A5A40]/20 rounded-2xl p-4 text-xs text-[#2D2D2D] placeholder-[#5A5A40]/40 focus:outline-none focus:border-[#5A5A40]"
-            />
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
+                    <Camera className="w-5 h-5" />
+                    <span>Take photo of bill</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImagePicked} />
+                  </label>
+                  <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
+                    <ImagePlus className="w-5 h-5" />
+                    <span>Upload order screenshot</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImagePicked} />
+                  </label>
+                </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowBulkModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-[#5A5A40]/70 hover:text-[#5A5A40]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkSubmit}
-                disabled={isBulkProcessing || !bulkText.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#5A5A40]/90 text-white rounded-full text-xs font-semibold shadow-xs disabled:opacity-50 transition"
-              >
-                {isBulkProcessing ? (
-                  <>
-                    <Sparkles className="w-4 h-4 animate-spin" />
-                    <span>Categorizing...</span>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="w-4 h-4" />
-                    <span>Auto-Categorize & Import</span>
-                  </>
+                {isPreparingImage && (
+                  <p className="flex items-center gap-2 text-xs text-[#5A5A40]">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Preparing image...
+                  </p>
                 )}
-              </button>
-            </div>
+
+                {bulkImage && (
+                  <div className="flex items-center gap-3 bg-white border border-[#5A5A40]/15 rounded-2xl p-2">
+                    <img src={bulkImage.previewUrl} alt="Selected bill or order" className="w-16 h-16 object-cover rounded-xl" />
+                    <span className="flex-1 text-xs text-[#5A5A40]">Image ready</span>
+                    <button
+                      onClick={() => {
+                        URL.revokeObjectURL(bulkImage.previewUrl);
+                        setBulkImage(null);
+                      }}
+                      className="text-xs font-semibold text-[#5A5A40]/70 hover:text-red-700 px-3 py-2"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-[#5A5A40]/50 font-bold">
+                  <span className="flex-1 h-px bg-[#5A5A40]/15" />
+                  or type a list
+                  <span className="flex-1 h-px bg-[#5A5A40]/15" />
+                </div>
+
+                <textarea
+                  rows={3}
+                  placeholder="e.g. 1 kg atta, 500 g curd, 6 tomatoes, 200 g paneer, 1 kg toor dal"
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  className="w-full bg-white border border-[#5A5A40]/20 rounded-2xl p-4 text-xs text-[#2D2D2D] placeholder-[#5A5A40]/40 focus:outline-none focus:border-[#5A5A40]"
+                />
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button onClick={closeBulkModal} className="px-4 py-2 text-xs font-semibold text-[#5A5A40]/70 hover:text-[#5A5A40]">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkSubmit}
+                    disabled={isBulkProcessing || isPreparingImage || (!bulkText.trim() && !bulkImage)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#5A5A40]/90 text-white rounded-full text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                  >
+                    {isBulkProcessing ? (
+                      <>
+                        <Sparkles className="w-4 h-4 animate-spin" />
+                        <span>{bulkImage ? "Reading your bill..." : "Reading your list..."}</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-4 h-4" />
+                        <span>Find items</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
