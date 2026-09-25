@@ -1,3 +1,4 @@
+import { apiPost } from "../lib/api";
 import React, { useState } from "react";
 import { PantryItem, NutrientCategory, FoodGroup } from "../types";
 import {
@@ -278,12 +279,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
     if (!bulkText.trim()) return;
     setIsBulkProcessing(true);
     try {
-      const res = await fetch("/api/pantry/categorize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemsText: bulkText }),
-      });
-      const data = await res.json();
+      const data = await apiPost<{ items: any[] }>("/api/pantry/categorize", { itemsText: bulkText });
       if (data.items && Array.isArray(data.items)) {
         const formatted: Omit<PantryItem, "id">[] = data.items.map((i: any) => ({
           name: i.name || "Pantry Item",
@@ -308,6 +304,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
       }
     } catch (err) {
       console.error("Bulk import failed:", err);
+      alert((err as Error).message || "Couldn't read that list. Please try again.");
     } finally {
       setIsBulkProcessing(false);
     }

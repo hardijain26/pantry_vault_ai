@@ -3,175 +3,154 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
-import {
-  PantryItem,
-  UserProfile,
-  MediaItem,
-  CommunityPost,
-} from "./types";
-import {
-  initialPantryItems,
-  initialUserProfile,
-  initialMediaVault,
-  initialCommunityPosts,
-} from "./data/initialData";
+import React, { useState, useEffect, useCallback } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { Loader2 } from "lucide-react";
+import { PantryItem, UserProfile } from "./types";
+import { supabase } from "./lib/supabase";
+import { loadProfile, saveProfile, loadPantry, upsertItems, deleteItem } from "./lib/db";
 import { Header } from "./components/Header";
 import { PantryView } from "./components/PantryView";
-import { NutritionalDashboard } from "./components/NutritionalDashboard";
 import { WhatsAppAlerts } from "./components/WhatsAppAlerts";
-import { MediaVault } from "./components/MediaVault";
 import { DIYRecipeGenerator } from "./components/DIYRecipeGenerator";
 import { VoiceRecipeTranscriber } from "./components/VoiceRecipeTranscriber";
-import { SeasonalHarvestMap } from "./components/SeasonalHarvestMap";
-import { CommunityFeed } from "./components/CommunityFeed";
 import { UserProfileModal } from "./components/UserProfileModal";
+import { AuthScreen } from "./components/AuthScreen";
+
+const newId = () => crypto.randomUUID();
 
 export default function App() {
-  // Persistent State with LocalStorage
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
   const [activeTab, setActiveTab] = useState<string>("pantry");
-  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem("vegpantry_profile");
-    return saved ? JSON.parse(saved) : initialUserProfile;
-  });
-
-  const [pantryItems, setPantryItems] = useState<PantryItem[]>(() => {
-    const saved = localStorage.getItem("vegpantry_items");
-    return saved ? JSON.parse(saved) : initialPantryItems;
-  });
-
-  const [savedVault, setSavedVault] = useState<MediaItem[]>(() => {
-    const saved = localStorage.getItem("vegpantry_media");
-    return saved ? JSON.parse(saved) : initialMediaVault;
-  });
-
-  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>(() => {
-    const saved = localStorage.getItem("vegpantry_community");
-    return saved ? JSON.parse(saved) : initialCommunityPosts;
-  });
-
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
 
-  // Sync to LocalStorage
+  // ---- Auth ------------------------------------------------------------------
   useEffect(() => {
-    localStorage.setItem("vegpantry_profile", JSON.stringify(userProfile));
-  }, [userProfile]);
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const userId = session?.user.id;
+
+  // ---- Load this user's data -------------------------------------------------
+  const reload = useCallback(async () => {
+    if (!userId) return;
+    setLoadingData(true);
+    try {
+      const [profile, items] = await Promise.all([loadProfile(userId), loadPantry()]);
+      setUserProfile(profile);
+      setPantryItems(items);
+      setSyncError(null);
+    } catch (err: any) {
+      setSyncError(err.message || "Couldn't load your pantry.");
+    } finally {
+      setLoadingData(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    localStorage.setItem("vegpantry_items", JSON.stringify(pantryItems));
-  }, [pantryItems]);
+    if (userId) reload();
+    else {
+      setUserProfile(null);
+      setPantryItems([]);
+    }
+  }, [userId, reload]);
 
-  useEffect(() => {
-    localStorage.setItem("vegpantry_media", JSON.stringify(savedVault));
-  }, [savedVault]);
+  // Save to the database; on failure show an error and re-sync from the server.
+  const persist = (op: Promise<void>) =>
+    op.catch((err) => {
+      setSyncError(`Couldn't save your change: ${err.message || err}. Reloading your pantry.`);
+      reload();
+    });
 
-  useEffect(() => {
-    localStorage.setItem("vegpantry_community", JSON.stringify(communityPosts));
-  }, [communityPosts]);
-
-  // Pantry Handlers
+  // ---- Pantry handlers (update screen first, then save) ---------------------
   const handleUpdateQuantity = (id: string, delta: number) => {
-    setPantryItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: Math.max(0, item.quantity + delta),
-              lastUpdated: new Date().toISOString(),
-            }
-          : item
-      )
-    );
+    const current = pantryItems.find((i) => i.id === id);
+    if (!current) return;
+    const updated = { ...current, quantity: Math.max(0, current.quantity + delta), lastUpdated: new Date().toISOString() };
+    setPantryItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
+    persist(upsertItems([updated]));
   };
 
   const handleAddItem = (newItem: Omit<PantryItem, "id">) => {
-    const item: PantryItem = {
-      ...newItem,
-      id: "p_" + Date.now(),
-    };
+    const item: PantryItem = { ...newItem, id: newId() };
     setPantryItems((prev) => [item, ...prev]);
+    persist(upsertItems([item]));
   };
 
   const handleAddBulkItems = (bulkItems: Omit<PantryItem, "id">[]) => {
-    const formatted: PantryItem[] = bulkItems.map((b, idx) => ({
-      ...b,
-      id: "p_bulk_" + Date.now() + "_" + idx,
-    }));
-    setPantryItems((prev) => [...formatted, ...prev]);
+    const items: PantryItem[] = bulkItems.map((b) => ({ ...b, id: newId() }));
+    setPantryItems((prev) => [...items, ...prev]);
+    persist(upsertItems(items));
   };
 
   const handleEditItem = (updated: PantryItem) => {
-    setPantryItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setPantryItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    persist(upsertItems([updated]));
   };
 
   const handleDeleteItem = (id: string) => {
-    setPantryItems((prev) => prev.filter((item) => item.id !== id));
+    setPantryItems((prev) => prev.filter((i) => i.id !== id));
+    persist(deleteItem(id));
   };
 
-  // Media Vault Handlers
-  const handleSaveMedia = (media: MediaItem) => {
-    setSavedVault((prev) => [media, ...prev]);
+  const handleSaveProfile = (p: UserProfile) => {
+    setUserProfile(p);
+    if (userId) persist(saveProfile(userId, p));
   };
 
-  const handleDeleteMedia = (id: string) => {
-    setSavedVault((prev) => prev.filter((m) => m.id !== id));
+  const handleSignOut = async () => {
+    setShowProfileModal(false);
+    await supabase.auth.signOut();
   };
 
-  // Community Feed Handlers
-  const handleToggleLike = (postId: string) => {
-    setCommunityPosts((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          const liked = !post.likedByMe;
-          return {
-            ...post,
-            likedByMe: liked,
-            likes: liked ? post.likes + 1 : Math.max(0, post.likes - 1),
-          };
-        }
-        return post;
-      })
+  // ---- Render ----------------------------------------------------------------
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-700" />
+      </div>
     );
-  };
+  }
 
-  const handleAddComment = (postId: string, text: string) => {
-    setCommunityPosts((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          const newComment = {
-            id: "cm_" + Date.now(),
-            author: userProfile.name || "Chef",
-            text,
-            time: "Just now",
-          };
-          return {
-            ...post,
-            comments: [...post.comments, newComment],
-          };
-        }
-        return post;
-      })
+  if (!session) return <AuthScreen />;
+
+  if (!userProfile) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-4 text-center">
+        {loadingData || !syncError ? (
+          <Loader2 className="w-6 h-6 animate-spin text-emerald-700" />
+        ) : (
+          <>
+            <p className="text-sm text-stone-800 max-w-sm">{syncError}</p>
+            <div className="flex gap-3">
+              <button onClick={reload} className="px-4 py-2 bg-emerald-800 text-white text-xs font-bold rounded-full">
+                Try again
+              </button>
+              <button onClick={handleSignOut} className="px-4 py-2 text-stone-600 text-xs font-bold">
+                Sign out
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     );
-  };
+  }
 
-  const handleCreateCommunityPost = (post: Omit<CommunityPost, "id" | "likes" | "comments" | "createdAt">) => {
-    const newPost: CommunityPost = {
-      ...post,
-      id: "c_" + Date.now(),
-      likes: 1,
-      likedByMe: true,
-      comments: [],
-      createdAt: new Date().toISOString(),
-    };
-    setCommunityPosts((prev) => [newPost, ...prev]);
-  };
-
-  // Low Stock Items Count
   const lowStockCount = pantryItems.filter((item) => item.quantity <= item.threshold).length;
 
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-emerald-800 selection:text-white">
-      {/* App Header & Navigation */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -180,7 +159,17 @@ export default function App() {
         onOpenProfile={() => setShowProfileModal(true)}
       />
 
-      {/* Main View Container */}
+      {syncError && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-300 text-amber-950 text-xs rounded-2xl p-3">
+            <span>{syncError}</span>
+            <button onClick={() => setSyncError(null)} className="font-bold shrink-0">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-20 lg:pb-8">
         {activeTab === "pantry" && (
           <PantryView
@@ -193,74 +182,23 @@ export default function App() {
           />
         )}
 
-        {activeTab === "harvest" && (
-          <SeasonalHarvestMap
-            pantryItems={pantryItems}
-            userProfile={userProfile}
-            onAddIngredientToPantry={handleAddItem}
-            onNavigateToPantry={() => setActiveTab("pantry")}
-          />
-        )}
-
-        {activeTab === "nutrition" && (
-          <NutritionalDashboard
-            items={pantryItems}
-            userProfile={userProfile}
-            onNavigateToPantry={() => setActiveTab("pantry")}
-            onSetStockReminder={() => setActiveTab("alerts")}
-          />
-        )}
-
         {activeTab === "alerts" && (
-          <WhatsAppAlerts
-            items={pantryItems}
-            userProfile={userProfile}
-            onUpdateQuantity={handleUpdateQuantity}
-          />
+          <WhatsAppAlerts items={pantryItems} userProfile={userProfile} onUpdateQuantity={handleUpdateQuantity} />
         )}
 
-        {activeTab === "media" && (
-          <MediaVault
-            savedVault={savedVault}
-            userProfile={userProfile}
-            onSaveMedia={handleSaveMedia}
-            onDeleteMedia={handleDeleteMedia}
-          />
-        )}
-
-        {activeTab === "diy" && (
-          <DIYRecipeGenerator
-            pantryItems={pantryItems}
-            userProfile={userProfile}
-            onPostToCommunity={handleCreateCommunityPost}
-          />
-        )}
+        {activeTab === "diy" && <DIYRecipeGenerator pantryItems={pantryItems} userProfile={userProfile} />}
 
         {activeTab === "voice" && (
-          <VoiceRecipeTranscriber
-            userProfile={userProfile}
-            onAddIngredientToPantry={handleAddItem}
-            onPublishToCommunity={handleCreateCommunityPost}
-            onNavigateToCommunity={() => setActiveTab("community")}
-          />
-        )}
-
-        {activeTab === "community" && (
-          <CommunityFeed
-            posts={communityPosts}
-            onToggleLike={handleToggleLike}
-            onAddComment={handleAddComment}
-            onCreatePost={handleCreateCommunityPost}
-            userDietaryPreference={userProfile.dietaryPreference}
-          />
+          <VoiceRecipeTranscriber userProfile={userProfile} onAddIngredientToPantry={handleAddItem} />
         )}
       </main>
 
-      {/* User Profile Health Modal */}
       {showProfileModal && (
         <UserProfileModal
           userProfile={userProfile}
-          onSaveProfile={setUserProfile}
+          email={session.user.email || ""}
+          onSaveProfile={handleSaveProfile}
+          onSignOut={handleSignOut}
           onClose={() => setShowProfileModal(false)}
         />
       )}

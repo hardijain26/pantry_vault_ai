@@ -59,12 +59,17 @@ export interface PantryItem {
 
 export interface UserProfile {
   name: string;
-  age: number;
   dietaryPreference: DietaryPreference;
-  medicalConditions: MedicalCondition[];
-  dailyCalorieGoal: number;
   whatsappPhone: string;
+  /** Billing state for the manual UPI paywall; set in Supabase, read-only in the app. */
+  plan?: "trial" | "paid" | "expired";
+  trialEndsAt?: string;
   theme: "organic-light" | "sage-dark";
+  // Removed from the MVP (no health data collected). Kept optional so the
+  // parked tabs (Nutrition, Media Vault) still compile.
+  age?: number;
+  medicalConditions?: MedicalCondition[];
+  dailyCalorieGoal?: number;
 }
 
 export interface MediaItem {
@@ -117,8 +122,8 @@ export interface DIYRecipe {
     fats: number;
     fiber: number;
   };
-  healthMatchScore: number;
-  healthVerdict: string;
+  healthMatchScore?: number;
+  healthVerdict?: string;
   whatsappShareText?: string;
   createdAt: string;
 }
@@ -153,8 +158,8 @@ export interface VoiceRecipeResult {
   servings: number;
   ingredients: { item: string; quantity: string; pantryMatch: string }[];
   instructions: string[];
-  healthScore: number;
-  healthVerdict: string;
+  healthScore?: number;
+  healthVerdict?: string;
   nutrition: {
     calories: number;
     protein: number;

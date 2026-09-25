@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { UserProfile, DietaryPreference, MedicalCondition } from "../types";
-import { X, UserCheck, HeartPulse, Phone, Shield, Check } from "lucide-react";
+import { UserProfile, DietaryPreference } from "../types";
+import { X, UserCheck, LogOut } from "lucide-react";
 
 interface UserProfileModalProps {
   userProfile: UserProfile;
+  email: string;
   onSaveProfile: (profile: UserProfile) => void;
+  onSignOut: () => void;
   onClose: () => void;
 }
 
@@ -17,40 +19,14 @@ const dietaryPreferences: DietaryPreference[] = [
   "High-Protein Veg",
 ];
 
-const medicalConditionsList: MedicalCondition[] = [
-  "Diabetes",
-  "Hypertension",
-  "IBS",
-  "High Cholesterol",
-  "Celiac / Gluten Intolerance",
-  "PCOS",
-  "Acid Reflux",
-  "None",
-];
-
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   userProfile,
+  email,
   onSaveProfile,
+  onSignOut,
   onClose,
 }) => {
   const [formData, setFormData] = useState<UserProfile>({ ...userProfile });
-
-  const toggleCondition = (condition: MedicalCondition) => {
-    if (condition === "None") {
-      setFormData({ ...formData, medicalConditions: ["None"] });
-      return;
-    }
-
-    let updated = formData.medicalConditions.filter((c) => c !== "None");
-    if (updated.includes(condition)) {
-      updated = updated.filter((c) => c !== condition);
-    } else {
-      updated.push(condition);
-    }
-
-    if (updated.length === 0) updated = ["None"];
-    setFormData({ ...formData, medicalConditions: updated });
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,48 +40,34 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="flex items-center justify-between border-b border-emerald-900/10 pb-3">
           <div className="flex items-center gap-2">
             <UserCheck className="w-5 h-5 text-emerald-800" />
-            <h2 className="text-lg font-serif-italic text-stone-900 font-bold">
-              Health & Aesthetic Context Profile
-            </h2>
+            <h2 className="text-lg font-serif-italic text-stone-900 font-bold">Your profile</h2>
           </div>
-          <button onClick={onClose} className="p-2 text-stone-400 hover:text-stone-700 min-w-[40px] min-h-[40px] flex items-center justify-center">
+          <button
+            onClick={onClose}
+            className="p-2 text-stone-400 hover:text-stone-700 min-w-[40px] min-h-[40px] flex items-center justify-center"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <p className="text-xs text-stone-600 leading-relaxed font-medium">
-          All AI evaluations (health verdicts, recipe generation, vault analysis, and voice processing) strictly factor in these parameters to protect your health goals.
+          Signed in as <strong>{email}</strong>. Recipes follow your food habit below.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-stone-800 font-bold mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-stone-800 font-bold mb-1">Age</label>
-              <input
-                type="number"
-                min={1}
-                max={120}
-                required
-                value={formData.age}
-                onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
-                className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
-              />
-            </div>
+          <div>
+            <label className="block text-stone-800 font-bold mb-1">Name</label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
+            />
           </div>
 
           <div>
-            <label className="block text-stone-800 font-bold mb-1.5">Food Habit / Dietary Preference *</label>
+            <label className="block text-stone-800 font-bold mb-1.5">Food habit *</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {dietaryPreferences.map((pref) => {
                 const isSelected = formData.dietaryPreference === pref;
@@ -128,69 +90,39 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-stone-800 font-bold mb-1.5">
-              Medical Conditions (Select All Applicable)
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {medicalConditionsList.map((cond) => {
-                const isSelected = formData.medicalConditions.includes(cond);
-                return (
-                  <button
-                    type="button"
-                    key={cond}
-                    onClick={() => toggleCondition(cond)}
-                    className={`flex items-center justify-between p-2.5 rounded-2xl border text-left text-xs transition min-h-[42px] ${
-                      isSelected
-                        ? "bg-amber-100 border-amber-300 text-amber-950 font-bold"
-                        : "bg-stone-50 border-stone-200 text-stone-700 hover:bg-emerald-50"
-                    }`}
-                  >
-                    <span>{cond}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-amber-800" />}
-                  </button>
-                );
-              })}
-            </div>
+            <label className="block text-stone-800 font-bold mb-1">WhatsApp number (for sharing lists)</label>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={formData.whatsappPhone}
+              onChange={(e) => setFormData({ ...formData, whatsappPhone: e.target.value })}
+              className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-stone-800 font-bold mb-1">WhatsApp Phone Number</label>
-              <input
-                type="text"
-                placeholder="+1 (555) 234-5678"
-                value={formData.whatsappPhone}
-                onChange={(e) => setFormData({ ...formData, whatsappPhone: e.target.value })}
-                className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-stone-800 font-bold mb-1">Daily Calorie Target</label>
-              <input
-                type="number"
-                step={50}
-                value={formData.dailyCalorieGoal}
-                onChange={(e) => setFormData({ ...formData, dailyCalorieGoal: Number(e.target.value) })}
-                className="w-full bg-stone-50 border border-stone-200 rounded-full px-4 py-2.5 text-stone-900 font-medium focus:outline-none focus:border-emerald-600 min-h-[44px]"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-3 border-t border-stone-200">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 pt-3 border-t border-stone-200">
             <button
               type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 text-stone-600 hover:text-stone-900 font-semibold rounded-full min-h-[44px]"
+              onClick={onSignOut}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-stone-600 hover:text-red-700 font-semibold rounded-full min-h-[44px]"
             >
-              Cancel
+              <LogOut className="w-4 h-4" /> Sign out
             </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-full shadow-xs transition min-h-[44px]"
-            >
-              Save Profile Settings
-            </button>
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 text-stone-600 hover:text-stone-900 font-semibold rounded-full min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-full shadow-xs transition min-h-[44px]"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </form>
       </div>

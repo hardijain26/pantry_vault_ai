@@ -1,3 +1,4 @@
+import { apiPost } from "../lib/api";
 import React, { useState, useRef } from "react";
 import { UserProfile, VoiceRecipeResult, PantryItem, CommunityPost } from "../types";
 import {
@@ -25,8 +26,6 @@ import { WhatsAppIcon, AestheticProduceArt } from "./ProduceIcons";
 interface VoiceRecipeTranscriberProps {
   userProfile: UserProfile;
   onAddIngredientToPantry: (item: Omit<PantryItem, "id">) => void;
-  onPublishToCommunity?: (post: Omit<CommunityPost, "id" | "likes" | "comments" | "createdAt">) => void;
-  onNavigateToCommunity?: () => void;
 }
 
 const SAMPLE_MULTILINGUAL_PROMPTS = [
@@ -55,8 +54,6 @@ const SAMPLE_MULTILINGUAL_PROMPTS = [
 export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
   userProfile,
   onAddIngredientToPantry,
-  onPublishToCommunity,
-  onNavigateToCommunity,
 }) => {
   const [activeInputMode, setActiveInputMode] = useState<"mic" | "transcript">("mic");
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -67,7 +64,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [result, setResult] = useState<VoiceRecipeResult | null>(null);
   const [addedPantryItems, setAddedPantryItems] = useState<Set<string>>(new Set());
-  const [publishedState, setPublishedState] = useState<boolean>(false);
   const [copiedMarkdown, setCopiedMarkdown] = useState<boolean>(false);
   const [activeTranscriptView, setActiveTranscriptView] = useState<"english" | "original">("english");
 
@@ -121,7 +117,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
     setAudioUrl(null);
     setRecordingSeconds(0);
     setResult(null);
-    setPublishedState(false);
   };
 
   const handleTranscribe = async () => {
@@ -129,10 +124,9 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
 
     setIsTranscribing(true);
     setResult(null);
-    setPublishedState(false);
 
     try {
-      let bodyData: any = { userProfile };
+      let bodyData: any = { dietaryPreference: userProfile.dietaryPreference };
 
       if (activeInputMode === "mic" && audioBlob) {
         const reader = new FileReader();
@@ -142,37 +136,23 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
           bodyData.audioBase64 = base64data;
           bodyData.mimeType = audioBlob.type || "audio/webm";
 
-          const res = await fetch("/api/recipes/transcribe-voice", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(bodyData),
-          });
-          const data = await res.json();
-          if (res.ok && data.result) {
+          try {
+            const data = await apiPost<{ result: VoiceRecipeResult }>("/api/recipes/transcribe-voice", bodyData);
             setResult(data.result);
-          } else {
-            alert("Transcription process encountered an error. Please try again or use text dictation.");
+          } catch (err) {
+            alert((err as Error).message || "Transcription failed. Please try again or use text dictation.");
           }
           setIsTranscribing(false);
         };
       } else {
         bodyData.transcript = pastedTranscript.trim();
-        const res = await fetch("/api/recipes/transcribe-voice", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyData),
-        });
-        const data = await res.json();
-        if (res.ok && data.result) {
-          setResult(data.result);
-        } else {
-          alert("Transcription process encountered an error. Please check input and try again.");
-        }
+        const data = await apiPost<{ result: VoiceRecipeResult }>("/api/recipes/transcribe-voice", bodyData);
+        setResult(data.result);
         setIsTranscribing(false);
       }
     } catch (err) {
       console.error("Transcription failed:", err);
-      alert("Network or server connection error. Please try again.");
+      alert((err as Error).message || "Network or server connection error. Please try again.");
       setIsTranscribing(false);
     }
   };
@@ -207,22 +187,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
     });
   };
 
-  const handlePublishPost = () => {
-    if (!result || !onPublishToCommunity) return;
-    onPublishToCommunity({
-      authorName: userProfile.name || "Vegetarian Chef",
-      authorDiet: userProfile.dietaryPreference,
-      recipeTitle: result.title,
-      recipeDescription: result.englishTranscript || result.rawTranscript || "Spoken voice recipe translated into English and published via VegPantry Voice Transcriber.",
-      dietCategory: userProfile.dietaryPreference,
-      prepTime: result.prepTime || "15 mins",
-      healthScore: result.healthScore || 9,
-      ingredients: result.ingredients.map((i) => `${i.quantity} ${i.item}`),
-      instructions: result.instructions,
-    });
-    setPublishedState(true);
-  };
-
   const handleWhatsAppPublish = () => {
     if (!result) return;
     const phone = userProfile.whatsappPhone ? userProfile.whatsappPhone.replace(/[^0-9]/g, "") : "";
@@ -245,7 +209,7 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
       .map((i) => `- ${i.quantity} ${i.item}`)
       .join("\n")}\n\n## Instructions\n${result.instructions
       .map((step, idx) => `${idx + 1}. ${step}`)
-      .join("\n")}\n\n## Health Verdict\n${result.healthVerdict}`;
+      .join("\n")}`;
     navigator.clipboard.writeText(text);
     setCopiedMarkdown(true);
     setTimeout(() => setCopiedMarkdown(false), 2000);
@@ -509,12 +473,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
               </div>
             </div>
 
-            <div className="text-center bg-stone-50 p-3 rounded-2xl border border-stone-200 shrink-0">
-              <span className="block text-[9px] text-stone-500 uppercase font-bold">Health Score</span>
-              <span className="text-2xl font-black text-emerald-800 font-mono">
-                {result.healthScore || 9}/10
-              </span>
-            </div>
           </div>
 
           {/* Dual Transcript View Tabs */}
@@ -555,13 +513,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
             </p>
           </div>
 
-          {/* Verdict */}
-          <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 text-xs text-stone-900">
-            <strong className="text-emerald-950 font-bold block mb-0.5">
-              Nutritional Verdict ({userProfile.dietaryPreference}):
-            </strong>
-            {result.healthVerdict}
-          </div>
 
           {/* Nutrition Macros Pill */}
           {result.nutrition && (
@@ -671,27 +622,13 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
                   <span>Publish Transcribed English Recipe</span>
                 </h3>
                 <p className="text-xs text-stone-500 font-medium">
-                  Share your translated recipe directly with the VegPantry community or send via WhatsApp.
+                  Send the translated recipe on WhatsApp or copy it.
                 </p>
               </div>
 
-              {publishedState && (
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full border border-emerald-300 flex items-center gap-1.5 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700" /> Published to Community Feed!
-                </span>
-              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handlePublishPost}
-                disabled={publishedState}
-                className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-6 py-3.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-full shadow-md transition disabled:opacity-60 min-h-[44px]"
-              >
-                <BookOpen className="w-4 h-4" />
-                <span>{publishedState ? "Published to Community Feed" : "Publish to VegPantry Community"}</span>
-              </button>
 
               <button
                 type="button"
@@ -712,19 +649,6 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
               </button>
             </div>
 
-            {publishedState && onNavigateToCommunity && (
-              <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3 text-xs text-emerald-950 font-medium">
-                <span>🎉 Your transcribed English recipe is live on the VegPantry Community Feed!</span>
-                <button
-                  type="button"
-                  onClick={onNavigateToCommunity}
-                  className="font-bold text-emerald-800 hover:underline flex items-center gap-1 shrink-0"
-                >
-                  <span>View in Community</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

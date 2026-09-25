@@ -60,43 +60,30 @@ This entire application was conceptualized, designed, and constructed through **
 
 ---
 
-## 📥 Local Setup & Installation
+## Setup
 
-If you want to run or customize this project locally:
+### 1. Database (once)
+In Supabase: **SQL Editor → New query**, paste the contents of `supabase/schema.sql`, click **Run**.
+This creates the `profiles`, `pantry_items` and `ai_usage` tables with row-level security, so each account sees only its own data.
 
+### 2. Run locally
 ```bash
-# 1. Clone the repository
-git clone https://github.com/hardijain26/-pantry-vault-ai.git
-
-# 2. Navigate to the directory
-cd -pantry-vault-ai
-
-# 3. Install dependencies
-npm install
-
-# 4. Copy environment variables
-cp .env.example .env
-
-# 5. Start the application
-npm run dev
+git clone https://github.com/hardijain26/pantry_vault_ai.git
+cd pantry_vault_ai
+bun install            # or npm install
+cp .env.example .env   # then add your GEMINI_API_KEY
+bun run dev            # http://localhost:3000
 ```
 
-Open your browser at `http://localhost:3000`.
+### 3. Deploy on Vercel
+Import the repo in Vercel. Add these environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `GEMINI_API_KEY`.
+`vercel.json` builds the frontend with Vite and serves `/api/*` from `api/index.ts`.
+Then in Supabase: **Authentication → URL Configuration**, set **Site URL** to your Vercel URL.
 
----
-
-## 📤 Publishing to GitHub
-
-To push your local workspace to your GitHub repository:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: Pantry Vault AI"
-git branch -M main
-git remote add origin https://github.com/hardijain26/-pantry-vault-ai.git
-git push -u origin main
-```
+### Accounts and limits
+- Sign-in is by email magic link (Supabase Auth). Google sign-in comes next.
+- Every `/api` route needs a signed-in user and is capped at `AI_DAILY_LIMIT` requests per 24 hours (default 30).
+- `profiles.plan` / `trial_ends_at` are for the manual UPI paywall; only you can change them, from the Supabase Table Editor.
 
 ---
 
