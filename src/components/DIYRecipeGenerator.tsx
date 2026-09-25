@@ -1,3 +1,4 @@
+import { notify } from "../lib/notify";
 import React, { useState } from "react";
 import { apiPost } from "../lib/api";
 import { PantryItem, UserProfile, DIYRecipe, CommunityPost } from "../types";
@@ -83,7 +84,7 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
       }
     } catch (err) {
       console.error("Failed to generate DIY recipe:", err);
-      alert((err as Error).message || "Couldn't generate recipes. Please try again.");
+      notify((err as Error).message || "Couldn't generate recipes. Please try again.");
     } finally {
       setIsGenerating(false);
     }

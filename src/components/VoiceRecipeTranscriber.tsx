@@ -1,3 +1,4 @@
+import { notify } from "../lib/notify";
 import { apiPost } from "../lib/api";
 import React, { useState, useRef } from "react";
 import { UserProfile, VoiceRecipeResult, PantryItem, CommunityPost } from "../types";
@@ -100,7 +101,7 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
       }, 1000);
     } catch (err) {
       console.error("Microphone access failed:", err);
-      alert("Microphone permission required for audio recording. You can also paste voice dictation in any language in the Text Dictation tab!");
+      notify("Microphone permission required for audio recording. You can also paste voice dictation in any language in the Text Dictation tab!");
     }
   };
 
@@ -140,7 +141,7 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
             const data = await apiPost<{ result: VoiceRecipeResult }>("/api/recipes/transcribe-voice", bodyData);
             setResult(data.result);
           } catch (err) {
-            alert((err as Error).message || "Transcription failed. Please try again or use text dictation.");
+            notify((err as Error).message || "Transcription failed. Please try again or use text dictation.");
           }
           setIsTranscribing(false);
         };
@@ -152,7 +153,7 @@ export const VoiceRecipeTranscriber: React.FC<VoiceRecipeTranscriberProps> = ({
       }
     } catch (err) {
       console.error("Transcription failed:", err);
-      alert((err as Error).message || "Network or server connection error. Please try again.");
+      notify((err as Error).message || "Network or server connection error. Please try again.");
       setIsTranscribing(false);
     }
   };

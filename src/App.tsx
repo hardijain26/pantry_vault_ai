@@ -16,6 +16,7 @@ import { DIYRecipeGenerator } from "./components/DIYRecipeGenerator";
 import { VoiceRecipeTranscriber } from "./components/VoiceRecipeTranscriber";
 import { UserProfileModal } from "./components/UserProfileModal";
 import { AuthScreen } from "./components/AuthScreen";
+import { Toaster } from "./components/Toaster";
 
 const newId = () => crypto.randomUUID();
 
@@ -123,7 +124,13 @@ export default function App() {
     );
   }
 
-  if (!session) return <AuthScreen />;
+  if (!session)
+    return (
+      <>
+        <Toaster />
+        <AuthScreen />
+      </>
+    );
 
   if (!userProfile) {
     return (
@@ -151,6 +158,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-emerald-800 selection:text-white">
+      <Toaster />
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}

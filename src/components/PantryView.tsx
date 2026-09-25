@@ -1,3 +1,4 @@
+import { notify } from "../lib/notify";
 import { apiPost } from "../lib/api";
 import { prepareImage } from "../lib/image";
 import React, { useState, useEffect } from "react";
@@ -302,7 +303,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
       if (bulkImage) URL.revokeObjectURL(bulkImage.previewUrl);
       setBulkImage({ ...prepared, previewUrl: URL.createObjectURL(file) });
     } catch (err) {
-      alert((err as Error).message);
+      notify((err as Error).message);
     } finally {
       setIsPreparingImage(false);
     }
@@ -319,7 +320,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
     setIsDragging(false);
     const file = Array.from(e.dataTransfer.files as FileList).find((f: File) => f.type.startsWith("image/"));
     if (file) loadImageFile(file);
-    else alert("Please drop an image (a screenshot or a photo of the bill).");
+    else notify("Please drop an image (a screenshot or a photo of the bill).");
   };
 
   // Paste a screenshot straight from the clipboard (Ctrl+V / Cmd+V) while the import window is open.
@@ -347,7 +348,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
       });
       const items = Array.isArray(data.items) ? data.items : [];
       if (items.length === 0) {
-        alert(bulkImage ? "No grocery items found in that image. Try a clearer photo or a screenshot of the order." : "No items found in that text.");
+        notify(bulkImage ? "No grocery items found in that image. Try a clearer photo or a screenshot of the order." : "No items found in that text.");
         return;
       }
       const today = Date.now();
@@ -376,7 +377,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
       );
     } catch (err) {
       console.error("Bulk import failed:", err);
-      alert((err as Error).message || "Couldn't read that. Please try again.");
+      notify((err as Error).message || "Couldn't read that. Please try again.");
     } finally {
       setIsBulkProcessing(false);
     }
