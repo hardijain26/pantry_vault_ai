@@ -1,16 +1,5 @@
 import React from "react";
-import {
-  ShoppingBag,
-  Activity,
-  BellRing,
-  Youtube,
-  ChefHat,
-  Mic,
-  Users,
-  Sparkles,
-  Apple,
-  Calendar,
-} from "lucide-react";
+import { ShoppingBag, BellRing, ChefHat, Mic, Sparkles } from "lucide-react";
 import { UserProfile } from "../types";
 import { ProduceIcon } from "./ProduceIcons";
 
@@ -31,8 +20,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const navItems = [
     { id: "pantry", label: "Inventory", icon: ShoppingBag, produce: "broccoli" },
-    { id: "harvest", label: "Harvest Map", icon: Calendar, produce: "spinach" },
-    { id: "nutrition", label: "Nutrition", icon: Activity, produce: "avocado" },
     {
       id: "alerts",
       label: "Stock Alerts",
@@ -40,10 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
       badge: lowStockCount > 0 ? lowStockCount : null,
       produce: "lemon",
     },
-    { id: "media", label: "Vault Analysis", icon: Youtube, produce: "kimchi" },
     { id: "diy", label: "DIY Recipes", icon: ChefHat, produce: "carrot" },
     { id: "voice", label: "Voice Studio", icon: Mic, produce: "garlic" },
-    { id: "community", label: "Community", icon: Users, produce: "berry" },
   ];
 
   return (
@@ -109,18 +94,18 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenProfile}
               className="flex items-center gap-2.5 pl-3 border-l border-emerald-900/10 text-right hover:opacity-90 transition group shrink-0"
-              title="Click to edit health profile"
+              title="Edit your profile"
             >
               <div className="hidden sm:block leading-none">
                 <p className="text-xs font-bold text-stone-900 group-hover:text-emerald-700 transition whitespace-nowrap">
-                  {userProfile.name || "Elena V."}
+                  {userProfile.name || "Your profile"}
                 </p>
                 <p className="text-[10px] text-emerald-700 font-semibold mt-0.5 whitespace-nowrap">
                   {userProfile.dietaryPreference}
                 </p>
               </div>
               <div className="relative w-9 h-9 rounded-2xl bg-gradient-to-tr from-amber-200 via-emerald-100 to-green-200 text-emerald-900 flex items-center justify-center text-xs font-bold border border-emerald-300 shadow-xs shrink-0">
-                {userProfile.name ? userProfile.name.charAt(0) : "EV"}
+                {userProfile.name ? userProfile.name.charAt(0).toUpperCase() : "?"}
                 <span className="absolute -bottom-1 -right-1 text-xs">🥬</span>
               </div>
             </button>

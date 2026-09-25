@@ -26,7 +26,7 @@ export const WhatsAppAlerts: React.FC<WhatsAppAlertsProps> = ({
   userProfile,
   onUpdateQuantity,
 }) => {
-  const [phone, setPhone] = useState(userProfile.whatsappPhone || "+1 (555) 234-5678");
+  const [phone, setPhone] = useState(userProfile.whatsappPhone || "");
   const [copiedText, setCopiedText] = useState(false);
   const [copiedPayload, setCopiedPayload] = useState(false);
   const [simulatedWebhookToast, setSimulatedWebhookToast] = useState(false);
@@ -76,7 +76,6 @@ export const WhatsAppAlerts: React.FC<WhatsAppAlertsProps> = ({
       name: userProfile.name,
       phone: phone,
       dietaryPreference: userProfile.dietaryPreference,
-      medicalConditions: userProfile.medicalConditions,
     },
     alertSummary: {
       totalLowStockItems: lowStockItems.length,

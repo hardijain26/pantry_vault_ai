@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { apiPost } from "../lib/api";
 import { PantryItem, UserProfile, DIYRecipe, CommunityPost } from "../types";
 import {
   ChefHat,
@@ -20,13 +21,11 @@ import { AestheticProduceArt, ProduceIcon } from "./ProduceIcons";
 interface DIYRecipeGeneratorProps {
   pantryItems: PantryItem[];
   userProfile: UserProfile;
-  onPostToCommunity: (post: Omit<CommunityPost, "id" | "likes" | "comments" | "createdAt">) => void;
 }
 
 export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
   pantryItems,
   userProfile,
-  onPostToCommunity,
 }) => {
   const [selectedIngredientNames, setSelectedIngredientNames] = useState<string[]>(
     pantryItems.slice(0, 6).map((i) => i.name)
@@ -35,7 +34,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
   const [customNote, setCustomNote] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generatedRecipes, setGeneratedRecipes] = useState<DIYRecipe[]>([]);
-  const [postedRecipeIds, setPostedRecipeIds] = useState<Set<string>>(new Set());
 
   const toggleIngredient = (name: string) => {
     setSelectedIngredientNames((prev) =>
@@ -58,18 +56,12 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
     setGeneratedRecipes([]);
 
     try {
-      const res = await fetch("/api/recipes/diy-generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedIngredients: selectedIngredientNames,
-          userProfile,
-          mealType,
-          customNote,
-        }),
+      const data = await apiPost<{ recipes: any[] }>("/api/recipes/diy-generate", {
+        selectedIngredients: selectedIngredientNames,
+        dietaryPreference: userProfile.dietaryPreference,
+        mealType,
+        customNote,
       });
-
-      const data = await res.json();
       if (data.recipes && Array.isArray(data.recipes)) {
         const formatted: DIYRecipe[] = data.recipes.map((r: any, idx: number) => ({
           id: "diy_" + Date.now() + "_" + idx,
@@ -84,8 +76,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
           instructions: r.instructions || [],
           chefTips: r.chefTips,
           nutrition: r.nutrition || { calories: 300, protein: 12, carbs: 40, fats: 8, fiber: 7 },
-          healthMatchScore: r.healthMatchScore || 95,
-          healthVerdict: r.healthVerdict || "Tailored for your profile.",
           whatsappShareText: r.whatsappShareText,
           createdAt: new Date().toISOString(),
         }));
@@ -93,25 +83,10 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
       }
     } catch (err) {
       console.error("Failed to generate DIY recipe:", err);
+      alert((err as Error).message || "Couldn't generate recipes. Please try again.");
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const handleSharePost = (recipe: DIYRecipe) => {
-    onPostToCommunity({
-      authorName: userProfile.name || "Chef Aria",
-      authorDiet: userProfile.dietaryPreference,
-      recipeTitle: recipe.title,
-      recipeDescription: recipe.tagline || recipe.healthVerdict,
-      dietCategory: recipe.dietCategory,
-      prepTime: recipe.prepTime,
-      healthScore: Math.round(recipe.healthMatchScore / 10),
-      ingredients: recipe.ingredients,
-      instructions: recipe.instructions,
-    });
-
-    setPostedRecipeIds((prev) => new Set(prev).add(recipe.id));
   };
 
   return (
@@ -135,7 +110,7 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
               Zero-Waste Pantry DIY Recipe Generator
             </h1>
             <p className="text-xs text-[#5A5A40]/70 mt-1 max-w-2xl">
-              Checkmark ingredients currently sitting in your pantry. Gemini AI will craft gourmet, gut-friendly vegetarian recipes strictly complying with your dietary habit ({userProfile.dietaryPreference}) and health profile.
+              Checkmark ingredients currently sitting in your pantry. Gemini AI will craft gourmet, gut-friendly vegetarian recipes that fit your food habit ({userProfile.dietaryPreference}).
             </p>
           </div>
         </div>
@@ -273,7 +248,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
           )}
 
           {generatedRecipes.map((recipe) => {
-            const isPosted = postedRecipeIds.has(recipe.id);
             const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(
               recipe.whatsappShareText || `🌱 *${recipe.title}*\n\n${recipe.tagline}\n\nCheck out this recipe generated with VegPantry!`
             )}`;
@@ -302,12 +276,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
                     )}
                   </div>
 
-                  <div className="text-center bg-[#F9F8F4] p-3 rounded-2xl border border-[#5A5A40]/15 shrink-0">
-                    <span className="block text-[9px] text-[#5A5A40]/60 uppercase font-semibold">Health Match</span>
-                    <span className="text-lg font-black text-[#5A5A40] font-mono">
-                      {recipe.healthMatchScore}%
-                    </span>
-                  </div>
                 </div>
 
                 {/* Timing & Servings info */}
@@ -317,10 +285,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
                   <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-[#5A5A40]" /> Servings: {recipe.servings}</span>
                 </div>
 
-                {/* Health Verdict */}
-                <p className="text-xs text-[#2D2D2D] bg-[#E8D8C3]/30 p-3.5 rounded-2xl border border-[#5A5A40]/15 italic leading-relaxed">
-                  💡 <strong>Health Verdict:</strong> {recipe.healthVerdict}
-                </p>
 
                 {/* Ingredients List */}
                 <div>
@@ -387,14 +351,6 @@ export const DIYRecipeGenerator: React.FC<DIYRecipeGeneratorProps> = ({
 
                 {/* Share Actions */}
                 <div className="pt-3 border-t border-[#5A5A40]/10 flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    onClick={() => handleSharePost(recipe)}
-                    disabled={isPosted}
-                    className="flex items-center gap-1.5 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#5A5A40]/90 disabled:bg-[#5A5A40]/40 text-white rounded-full text-xs font-semibold transition shadow-xs"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>{isPosted ? "Posted to Community!" : "Share to Community Feed"}</span>
-                  </button>
 
                   <a
                     href={whatsappShareUrl}
