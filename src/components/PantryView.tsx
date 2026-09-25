@@ -1,6 +1,6 @@
 import { apiPost } from "../lib/api";
 import { prepareImage } from "../lib/image";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PantryItem, NutrientCategory, FoodGroup } from "../types";
 import {
   Plus,
@@ -290,10 +290,12 @@ export const PantryView: React.FC<PantryViewProps> = ({
     setShowBulkModal(false);
   };
 
-  const handleImagePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow picking the same file again
-    if (!file) return;
+  // Phones and tablets get a camera button; computers get drag-and-drop and paste.
+  const isTouchDevice =
+    typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  const [isDragging, setIsDragging] = useState(false);
+
+  const loadImageFile = async (file: File) => {
     setIsPreparingImage(true);
     try {
       const prepared = await prepareImage(file);
@@ -305,6 +307,34 @@ export const PantryView: React.FC<PantryViewProps> = ({
       setIsPreparingImage(false);
     }
   };
+
+  const handleImagePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again
+    if (file) loadImageFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = Array.from(e.dataTransfer.files as FileList).find((f: File) => f.type.startsWith("image/"));
+    if (file) loadImageFile(file);
+    else alert("Please drop an image (a screenshot or a photo of the bill).");
+  };
+
+  // Paste a screenshot straight from the clipboard (Ctrl+V / Cmd+V) while the import window is open.
+  useEffect(() => {
+    if (!showBulkModal || pendingItems) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith("image/"));
+      const file = item?.getAsFile();
+      if (!file) return; // plain text paste goes into the list box as usual
+      e.preventDefault();
+      loadImageFile(file);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [showBulkModal, pendingItems, bulkImage]);
 
   const handleBulkSubmit = async () => {
     if (!bulkText.trim() && !bulkImage) return;
@@ -1080,22 +1110,46 @@ export const PantryView: React.FC<PantryViewProps> = ({
             ) : (
               <>
                 <p className="text-xs text-[#5A5A40]/80 leading-relaxed">
-                  Take a photo of a shop bill, upload a screenshot of your Zepto, Blinkit, Instamart or BigBasket order, or
-                  paste a list. We'll pick out the food items, quantities and a use-by date for each.
+                  Add a shop bill or a screenshot of your Zepto, Blinkit, Instamart or BigBasket order, or type a list.
+                  We'll pick out the food items, quantities and a use-by date for each.
                 </p>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
-                    <Camera className="w-5 h-5" />
-                    <span>Take photo of bill</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImagePicked} />
-                  </label>
-                  <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
-                    <ImagePlus className="w-5 h-5" />
-                    <span>Upload order screenshot</span>
+                {isTouchDevice ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
+                      <Camera className="w-5 h-5" />
+                      <span>Take photo of bill</span>
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImagePicked} />
+                    </label>
+                    <label className="flex flex-col items-center justify-center gap-1.5 p-4 bg-white border border-[#5A5A40]/20 rounded-2xl text-xs font-semibold text-center text-[#5A5A40] cursor-pointer hover:border-[#5A5A40] transition min-h-[88px]">
+                      <ImagePlus className="w-5 h-5" />
+                      <span>Upload order screenshot</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImagePicked} />
+                    </label>
+                  </div>
+                ) : (
+                  <label
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleDrop}
+                    className={`flex flex-col items-center justify-center gap-1.5 p-5 border-2 border-dashed rounded-2xl text-xs text-center text-[#5A5A40] cursor-pointer transition min-h-[120px] ${
+                      isDragging ? "bg-[#E8D8C3]/40 border-[#5A5A40]" : "bg-white border-[#5A5A40]/25 hover:border-[#5A5A40]"
+                    }`}
+                  >
+                    <ImagePlus className="w-6 h-6" />
+                    <span className="font-semibold">Drop an order screenshot or bill photo here</span>
+                    <span className="text-[#5A5A40]/70">
+                      or click to choose a file, or paste a screenshot with{" "}
+                      <kbd className="px-1.5 py-0.5 bg-[#F9F8F4] border border-[#5A5A40]/20 rounded font-sans">
+                        {/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘V" : "Ctrl+V"}
+                      </kbd>
+                    </span>
                     <input type="file" accept="image/*" className="hidden" onChange={handleImagePicked} />
                   </label>
-                </div>
+                )}
 
                 {isPreparingImage && (
                   <p className="flex items-center gap-2 text-xs text-[#5A5A40]">
