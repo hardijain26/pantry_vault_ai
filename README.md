@@ -1,62 +1,39 @@
-# Pantry Vault AI 🌿
+# Pantry Vault AI
 
-> **Built with Google AI Studio — An AI-Powered No-Code Solution for Smart Vegetarian Pantry Management & Recipe Creation**
+A pantry app for vegetarian households. Track what you have, see what expires soon, and get recipes that use it up. Built with React, Express, Supabase and Gemini.
 
----
+**Status:** private MVP, being tested with 10 to 20 households. Not open for public sign-up yet.
 
-## 🎯 Problem Statement
+## The problem
 
-Managing a household pantry, especially for **vegetarian and plant-based diets**, presents several subtle yet frustrating challenges every day:
+Fresh produce, paneer, curd and herbs go off before anyone remembers they're there. People buy groceries and still don't know what to cook with them, and staples like dal or atta run out without warning.
 
-1. **Food Waste & Overbuying**: Fresh produce, herbs, and plant-based protein items spoil quickly. Without real-time tracking, items sit hidden in shelves until they expire, leading to wasted food and money.
-2. **Nutritional Imbalances in Plant-Based Diets**: Vegetarian diets require conscious balancing of complete proteins, iron, B12, and essential micro-nutrients. Tracking macro and micro-nutrient coverage across stored pantry items is often complex and time-consuming.
-3. **The "What Should I Cook?" Dilemma**: People frequently buy groceries but still struggle to cook meals because they don't know what recipes can be made strictly from the items currently in stock.
-4. **Restock Friction & Forgotten Staples**: Running out of essential cooking staples (like lentils, spices, or plant milk) causes last-minute ordering stress.
-5. **Loss of Hands-Free Convenience**: Manually typing or logging inventory while cooking or unpacking groceries with wet/dirty hands is cumbersome.
+## What the app does today
 
----
+| Feature | What it does |
+| --- | --- |
+| Pantry | Add items one by one, or paste a shopping list and Gemini splits it into items with quantities and expiry dates. Each household sees only its own pantry. |
+| Stock alerts | Lists items at or below their reorder level and builds a shopping list you can send on WhatsApp. |
+| Recipes from your pantry | Tick the items you have; Gemini suggests two vegetarian recipes that follow your food habit (including Jain and vegan rules). |
+| Voice Studio | Dictate a recipe in any language; it comes back as a structured English recipe you can share or add to the pantry. |
 
-## 💡 The Solution: Pantry Vault AI
+Nutrition figures are rough AI estimates. The app does not give medical or health advice.
 
-**Pantry Vault AI** was built using a **No-Code / Natural Language AI Workflow** via Google AI Studio. By translating natural language prompts into a fully functional, real-time web application powered by Gemini AI models, **Pantry Vault AI** transforms passive grocery lists into an intelligent, interactive kitchen assistant.
+## Coming next
 
----
+1. Onboarding for new users, with a starter list of common staples.
+2. "I cooked this" button that reduces stock, and recipes that use expiring items first.
+3. Daily email or push reminder for items about to expire.
+4. Rough quantities (full / half / low / out), adding items from a bill or order screenshot, sharing a recipe with a cook in Hindi, and a 14-day trial followed by a paid plan.
 
-## ✨ Key Features & Problem Solvers
+## How it's built
 
-### 🥑 1. Intelligent Pantry Inventory Management
-* **Solves**: Food waste and forgotten expiration dates.
-* **Feature**: Real-time tracking of vegetarian inventory with visual freshness status indicators (Fresh, Approaching Expiry, Low Stock) and automated category organization.
+- **Frontend:** React + Vite + Tailwind (`src/`)
+- **API:** Express routes in `server/app.ts`, served by `api/index.ts` on Vercel and by `server.ts` locally
+- **Accounts and data:** Supabase Auth (email magic link) and Postgres with row-level security (`supabase/schema.sql`)
+- **AI:** Gemini via `@google/genai`, called only from the server so the API key never reaches the browser
 
-### 🥗 2. AI Micronutrient & Macro Evaluator
-* **Solves**: Plant-based dietary gaps and nutritional guesswork.
-* **Feature**: Powered by Gemini AI, it analyzes the total nutritional profile of your stored pantry, highlighting protein sources, dietary fiber ratios, essential micro-nutrients, and actionable health suggestions.
-
-### 🍳 3. Dynamic DIY Recipe Studio
-* **Solves**: Decision fatigue and "what's for dinner" stress.
-* **Feature**: Generates custom vegetarian and vegan recipes tailored strictly to what is currently available in your pantry, matching dietary goals (High Protein, Quick 15-Min, Low Calorie, Whole Food) while minimizing waste.
-
-### 📲 4. Low-Stock WhatsApp Alert Engine
-* **Solves**: Restock friction and forgotten household staples.
-* **Feature**: Detects depleted items and automatically constructs formatted WhatsApp restock messages with one-click sharing for quick grocery ordering or roommate coordination.
-
-### 🗺️ 5. Seasonal Harvest & Locavore Tracker
-* **Solves**: Overpaying for out-of-season produce and lower nutritional quality.
-* **Feature**: Displays optimal seasonal fruits and vegetables, guiding smarter, sustainable, and cost-effective grocery shopping.
-
-### 🎙️ 6. Hands-Free Voice Studio
-* **Solves**: Manual typing hassle while cooking or unpacking groceries.
-* **Feature**: Uses voice recognition to transcribe dictated ingredient updates and quick culinary notes seamlessly.
-
----
-
-## 🚀 Built as a No-Code Solution with Google AI Studio
-
-This entire application was conceptualized, designed, and constructed through **natural language prompting** in **Google AI Studio**:
-
-* **Zero Manual Boilerplate**: Built from conversational prompts without writing raw framework configurations manually.
-* **Integrated Gemini Intelligence**: Uses Google's `@google/genai` SDK on a secure server-side layer to provide nutrition evaluations, recipe logic, and natural language understanding.
-* **Modern Visual Experience**: High-contrast, responsive UI styled with Tailwind CSS, custom produce visual icons, and Motion animations.
+The first version was generated in Google AI Studio; accounts, storage and API protection were added afterwards.
 
 ---
 
