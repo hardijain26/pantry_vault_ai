@@ -9,9 +9,42 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+// Tried in order. If a model is overloaded (503) or rate-limited (429), we retry
+// once and then fall back to the next one. Override with GEMINI_MODELS="a,b,c".
+const GEMINI_MODELS = (process.env.GEMINI_MODELS || process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-3.8-flash,gemini-3.5-flash")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const MAX_TEXT = 4000; // characters of user text sent to the model
+
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const isBusyError = (err: any) => {
+  const text = `${err?.status ?? ""} ${err?.code ?? ""} ${err?.message ?? ""}`;
+  return /\b(429|500|503|504)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|DEADLINE_EXCEEDED/i.test(text);
+};
+
+/** generateContent with retry + model fallback for temporary Gemini overloads. */
+async function generate(ai: GoogleGenAI, params: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
+  let lastErr: any;
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await ai.models.generateContent({ ...params, model });
+      } catch (err: any) {
+        lastErr = err;
+        if (!isBusyError(err)) throw err; // a real problem (bad key, bad input): don't retry
+        console.warn(`Gemini ${model} busy (attempt ${attempt + 1}):`, String(err?.message || err).slice(0, 120));
+        if (attempt === 0) await sleep(1200);
+      }
+    }
+  }
+  const busy = new Error("The AI service is very busy right now. Please try again in a minute.");
+  (busy as any).cause = lastErr;
+  throw busy;
+}
 
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -138,8 +171,7 @@ If nothing edible is found, return an empty array.`;
       ? { parts: [{ inlineData: { data: imageBase64, mimeType: imageType } }, { text: prompt }] }
       : prompt;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generate(ai, {
       contents,
       config: {
         responseMimeType: "application/json",
@@ -200,8 +232,7 @@ Return a JSON object with a "recipes" array. Each recipe has:
 "whatsappShareText" (ready-to-send text with a few emojis).
 Do not make medical or health-condition claims.`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generate(ai, {
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -290,8 +321,7 @@ Return JSON with: "detectedLanguage" (e.g. "Hindi (हिंदी)"), "detected
 "suggestedPantryAdditions" (ingredient names), "whatsappShareText" (ready-to-send English text with a few emojis).
 Do not make medical or health-condition claims.`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generate(ai, {
       contents: { parts },
       config: {
         responseMimeType: "application/json",
