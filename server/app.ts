@@ -76,7 +76,9 @@ async function requireUser(req: AuthedRequest, res: Response, next: NextFunction
 
 const fail = (res: Response, route: string, err: any, msg: string) => {
   console.error(`Error in ${route}:`, err);
-  res.status(500).json({ error: msg });
+  // During the private MVP, include the underlying reason to speed up debugging.
+  const reason = String(err?.message || err || "").replace(/\s+/g, " ").slice(0, 200);
+  res.status(500).json({ error: reason ? `${msg} (${reason})` : msg });
 };
 
 // ---- App ----------------------------------------------------------------------
